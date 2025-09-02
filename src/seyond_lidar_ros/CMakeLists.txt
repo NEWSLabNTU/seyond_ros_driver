@@ -78,9 +78,9 @@ if($ENV{ROS_VERSION} MATCHES "2")
   )
 
   target_link_libraries(seyond_node
-    innolidarsdkclient.a
-    innolidarsdkcommon.a
-    innolidarutils.a
+    libinnolidarsdkclient.a
+    libinnolidarsdkcommon.a
+    libinnolidarutils.a
     ${PCL_LIBRARIES}
     ${YAML_CPP_LIBRARIES}
   )
@@ -192,9 +192,9 @@ if($ENV{ROS_VERSION} MATCHES "1")
   target_link_libraries(seyond_node
     ${catkin_LIBRARIES}
     ${YAML_CPP_LIBRARIES}
-    innolidarsdkclient.a
-    innolidarsdkcommon.a
-    innolidarutils.a
+    libinnolidarsdkclient.a
+    libinnolidarsdkcommon.a
+    libinnolidarutils.a
   )
 
   # seyond_test
