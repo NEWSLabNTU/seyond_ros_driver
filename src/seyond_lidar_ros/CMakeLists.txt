@@ -54,6 +54,29 @@ if($ENV{ROS_VERSION} MATCHES "2")
 
   include_directories(./)
 
+  # Build Seyond SDK libraries first
+  set(SEYOND_SDK_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/${SEYOND_SDK_PATH}/lib)
+
+  # Custom command to build SDK libraries (only if they don't exist)
+  add_custom_command(
+    OUTPUT
+      ${SEYOND_SDK_LIB_DIR}/libinnolidarutils.a
+      ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkcommon.a
+      ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkclient.a
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${SEYOND_SDK_LIB_DIR}
+    COMMAND bash -c "if [ ! -f ${SEYOND_SDK_LIB_DIR}/libinnolidarutils.a ] || [ ! -f ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkcommon.a ] || [ ! -f ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkclient.a ]; then cd ${CMAKE_CURRENT_SOURCE_DIR}/${SEYOND_SDK_PATH} && make src; fi"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${SEYOND_SDK_PATH}
+    COMMENT "Building Seyond SDK libraries if needed..."
+  )
+
+  # Custom target for SDK libraries
+  add_custom_target(seyond_sdk_libs
+    DEPENDS
+      ${SEYOND_SDK_LIB_DIR}/libinnolidarutils.a
+      ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkcommon.a
+      ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkclient.a
+  )
+
   # seyond_node
   add_executable(seyond_node
     node/seyond_node.cc
@@ -73,16 +96,19 @@ if($ENV{ROS_VERSION} MATCHES "2")
 
   target_link_directories(seyond_node
     PRIVATE
-    ${SEYOND_SDK_PATH}/lib
+    ${SEYOND_SDK_LIB_DIR}
   )
 
   target_link_libraries(seyond_node
-    libinnolidarsdkclient.a
-    libinnolidarsdkcommon.a
-    libinnolidarutils.a
+    ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkclient.a
+    ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkcommon.a
+    ${SEYOND_SDK_LIB_DIR}/libinnolidarutils.a
     ${PCL_LIBRARIES}
     ${YAML_CPP_LIBRARIES}
   )
+
+  # Make sure SDK is built before seyond_node
+  add_dependencies(seyond_node seyond_sdk_libs)
 
   ament_target_dependencies(seyond_node
     rclcpp
@@ -99,6 +125,9 @@ if($ENV{ROS_VERSION} MATCHES "2")
   )
 
   rosidl_target_interfaces(seyond_test ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
+  # Make sure SDK is built before seyond_test too
+  add_dependencies(seyond_test seyond_sdk_libs)
 
   ament_target_dependencies(seyond_test
     rclcpp
@@ -162,8 +191,28 @@ if($ENV{ROS_VERSION} MATCHES "1")
   )
   generate_messages(DEPENDENCIES std_msgs)
 
-  SET(SEYOND_SDK_LIB_DIR ${SEYOND_SDK_PATH}/lib/)
+  SET(SEYOND_SDK_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/${SEYOND_SDK_PATH}/lib/)
   SET(SEYOND_SDK_INC_DIR ${SEYOND_SDK_PATH}/src/)
+
+  # Build Seyond SDK libraries for ROS1 (only if they don't exist)
+  add_custom_command(
+    OUTPUT
+      ${SEYOND_SDK_LIB_DIR}/libinnolidarutils.a
+      ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkcommon.a
+      ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkclient.a
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${SEYOND_SDK_LIB_DIR}
+    COMMAND bash -c "if [ ! -f ${SEYOND_SDK_LIB_DIR}/libinnolidarutils.a ] || [ ! -f ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkcommon.a ] || [ ! -f ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkclient.a ]; then cd ${CMAKE_CURRENT_SOURCE_DIR}/${SEYOND_SDK_PATH} && make src; fi"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${SEYOND_SDK_PATH}
+    COMMENT "Building Seyond SDK libraries if needed..."
+  )
+
+  # Custom target for SDK libraries
+  add_custom_target(seyond_sdk_libs
+    DEPENDS
+      ${SEYOND_SDK_LIB_DIR}/libinnolidarutils.a
+      ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkcommon.a
+      ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkclient.a
+  )
 
   include_directories(
     ./
@@ -184,15 +233,15 @@ if($ENV{ROS_VERSION} MATCHES "1")
     src/driver/driver_lidar.cc
   )
 
-  add_dependencies(seyond_node seyond_generate_messages_cpp)
+  add_dependencies(seyond_node seyond_generate_messages_cpp seyond_sdk_libs)
 
 
   target_link_libraries(seyond_node
     ${catkin_LIBRARIES}
     ${YAML_CPP_LIBRARIES}
-    libinnolidarsdkclient.a
-    libinnolidarsdkcommon.a
-    libinnolidarutils.a
+    ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkclient.a
+    ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkcommon.a
+    ${SEYOND_SDK_LIB_DIR}/libinnolidarutils.a
   )
 
   # seyond_test
@@ -200,7 +249,7 @@ if($ENV{ROS_VERSION} MATCHES "1")
     node/seyond_test.cc
   )
 
-  add_dependencies(seyond_test seyond_generate_messages_cpp)
+  add_dependencies(seyond_test seyond_generate_messages_cpp seyond_sdk_libs)
 
   target_link_libraries(seyond_test
     ${catkin_LIBRARIES}
