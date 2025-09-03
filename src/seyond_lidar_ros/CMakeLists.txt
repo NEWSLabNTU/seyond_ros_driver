@@ -64,7 +64,7 @@ if($ENV{ROS_VERSION} MATCHES "2")
       ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkcommon.a
       ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkclient.a
     COMMAND ${CMAKE_COMMAND} -E make_directory ${SEYOND_SDK_LIB_DIR}
-    COMMAND bash -c "if [ ! -f ${SEYOND_SDK_LIB_DIR}/libinnolidarutils.a ] || [ ! -f ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkcommon.a ] || [ ! -f ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkclient.a ]; then cd ${CMAKE_CURRENT_SOURCE_DIR}/${SEYOND_SDK_PATH} && make src; fi"
+    COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_SOURCE_DIR}/${SEYOND_SDK_PATH} make src
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${SEYOND_SDK_PATH}
     COMMENT "Building Seyond SDK libraries if needed..."
   )
@@ -201,7 +201,7 @@ if($ENV{ROS_VERSION} MATCHES "1")
       ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkcommon.a
       ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkclient.a
     COMMAND ${CMAKE_COMMAND} -E make_directory ${SEYOND_SDK_LIB_DIR}
-    COMMAND bash -c "if [ ! -f ${SEYOND_SDK_LIB_DIR}/libinnolidarutils.a ] || [ ! -f ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkcommon.a ] || [ ! -f ${SEYOND_SDK_LIB_DIR}/libinnolidarsdkclient.a ]; then cd ${CMAKE_CURRENT_SOURCE_DIR}/${SEYOND_SDK_PATH} && make src; fi"
+    COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_SOURCE_DIR}/${SEYOND_SDK_PATH} make src
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${SEYOND_SDK_PATH}
     COMMENT "Building Seyond SDK libraries if needed..."
   )
