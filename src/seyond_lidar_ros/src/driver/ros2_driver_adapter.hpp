@@ -37,6 +37,7 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <std_msgs/msg/float64.hpp>
 #include <yaml-cpp/yaml.h>
 
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <string>
@@ -158,13 +159,72 @@ class ROSAdapter {
 
   void publishFrame(const pcl::PointCloud<SeyondPoint>& frame, double timestamp) {
     sensor_msgs::msg::PointCloud2 ros_msg;
-    pcl::toROSMsg(frame, ros_msg);
+    
+    // Create compact PointCloud2 message for Autoware compatibility
+    // Total point step: 12 (xyz) + 1 (I) + 1 (R) + 2 (C) = 16 bytes
     ros_msg.header.frame_id = lidar_config_.frame_id;
     int64_t ts_ns = timestamp * 1000;
     ros_msg.header.stamp.sec = ts_ns / 1000000000;
     ros_msg.header.stamp.nanosec = ts_ns % 1000000000;
-    ros_msg.width = frame.width;
-    ros_msg.height = frame.height;
+    
+    ros_msg.height = 1;
+    ros_msg.width = frame.size();
+    ros_msg.is_dense = true;
+    ros_msg.is_bigendian = false;
+    ros_msg.point_step = 16;  // Compact layout
+    ros_msg.row_step = ros_msg.point_step * ros_msg.width;
+    
+    // Define fields with compact offsets
+    ros_msg.fields.resize(6);
+    
+    ros_msg.fields[0].name = "x";
+    ros_msg.fields[0].offset = 0;
+    ros_msg.fields[0].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    ros_msg.fields[0].count = 1;
+    
+    ros_msg.fields[1].name = "y";
+    ros_msg.fields[1].offset = 4;
+    ros_msg.fields[1].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    ros_msg.fields[1].count = 1;
+    
+    ros_msg.fields[2].name = "z";
+    ros_msg.fields[2].offset = 8;
+    ros_msg.fields[2].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    ros_msg.fields[2].count = 1;
+    
+    ros_msg.fields[3].name = "intensity";
+    ros_msg.fields[3].offset = 12;  // Compact offset
+    ros_msg.fields[3].datatype = sensor_msgs::msg::PointField::UINT8;
+    ros_msg.fields[3].count = 1;
+    
+    ros_msg.fields[4].name = "return_type";
+    ros_msg.fields[4].offset = 13;
+    ros_msg.fields[4].datatype = sensor_msgs::msg::PointField::UINT8;
+    ros_msg.fields[4].count = 1;
+    
+    ros_msg.fields[5].name = "channel";
+    ros_msg.fields[5].offset = 14;
+    ros_msg.fields[5].datatype = sensor_msgs::msg::PointField::UINT16;
+    ros_msg.fields[5].count = 1;
+    
+    // Copy point data with compact layout
+    ros_msg.data.resize(ros_msg.row_step);
+    uint8_t* data_ptr = ros_msg.data.data();
+    
+    for (const auto& point : frame.points) {
+      // Copy x, y, z (12 bytes)
+      memcpy(data_ptr, &point.x, sizeof(float));
+      memcpy(data_ptr + 4, &point.y, sizeof(float));
+      memcpy(data_ptr + 8, &point.z, sizeof(float));
+      
+      // Copy I, R, C (4 bytes)
+      data_ptr[12] = point.intensity;
+      data_ptr[13] = point.return_type;
+      memcpy(data_ptr + 14, &point.ring, sizeof(uint16_t));
+      
+      data_ptr += 16;
+    }
+    
     inno_frame_pub_->publish(std::move(ros_msg));
   }
 
