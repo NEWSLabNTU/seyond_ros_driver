@@ -10,6 +10,7 @@
 
 #include <assert.h>
 
+#include <algorithm>
 #include <thread>
 #include <utility>
 
@@ -488,10 +489,15 @@ void DriverLidar::point_xyz_data_parse(bool is_use_refl, uint32_t point_num, Poi
     }
 
     if constexpr (std::is_same<PointType, const InnoEnXyzPoint *>::value) {
-      point.intensity =
-          is_use_refl ? static_cast<float>(point_ptr->reflectance) : static_cast<float>(point_ptr->intensity);
+      // Convert intensity to UINT8 (0-255 range) for Autoware compatibility
+      float intensity_val = is_use_refl ? point_ptr->reflectance : point_ptr->intensity;
+      // Clamp to 0-255 range
+      intensity_val = std::min(255.0f, std::max(0.0f, intensity_val));
+      point.intensity = static_cast<std::uint8_t>(intensity_val);
     } else if constexpr (std::is_same<PointType, const InnoXyzPoint *>::value) {
-      point.intensity = static_cast<float>(point_ptr->refl);
+      // Convert reflectance to UINT8 (0-255 range)
+      float refl_val = std::min(255.0f, std::max(0.0f, static_cast<float>(point_ptr->refl)));
+      point.intensity = static_cast<std::uint8_t>(refl_val);
     }
 #ifdef ENABLE_XYZIT
     if constexpr (std::is_same<PointType, const InnoEnXyzPoint *>::value) {
@@ -509,7 +515,7 @@ void DriverLidar::point_xyz_data_parse(bool is_use_refl, uint32_t point_num, Poi
     // Map Seyond data to Autoware PointXYZIRC format
     // Return type (R): 0=unknown, 1=strongest (first), 2=last (second)
     point.return_type = point_ptr->is_2nd_return ? 2 : 1;  // First return=strongest(1), Second return=last(2)
-    point.channel = point_ptr->scan_id;                     // Channel (C): Vertical scanning line ID
+    point.ring = point_ptr->scan_id;                        // Ring/Channel (C): Vertical scanning line ID
 #endif
     coordinate_transfer(&point, coordinate_mode_, point_ptr->x, point_ptr->y, point_ptr->z);
     pcl_pc_ptr->points.push_back(point);
