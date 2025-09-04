@@ -16,14 +16,16 @@ add_compile_options(-Ofast)
 set(SEYOND_SDK_PATH src/seyond_sdk/)
 
 #-------------------------------------
-# Point Type (PointXYZI, PointXYZIT)
+# Point Type (PointXYZI, PointXYZIT, PointXYZIRC)
 #-------------------------------------
-set(POINT_TYPE PointXYZIT)
+set(POINT_TYPE PointXYZIRC)
 
 if(${POINT_TYPE} STREQUAL "PointXYZI")
   add_definitions(-DENABLE_XYZI)
 elseif(${POINT_TYPE} STREQUAL "PointXYZIT")
   add_definitions(-DENABLE_XYZIT)
+elseif(${POINT_TYPE} STREQUAL "PointXYZIRC")
+  add_definitions(-DENABLE_XYZIRC)
 endif()
 
 

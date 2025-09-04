@@ -50,6 +50,9 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #ifdef ENABLE_XYZIT
 typedef seyond::PointXYZIT SeyondPoint;
+#elif defined(ENABLE_XYZIRC)
+#include "point_xyzirc.h"
+typedef seyond::PointXYZIRC SeyondPoint;
 #else
 typedef pcl::PointXYZI SeyondPoint;
 #endif

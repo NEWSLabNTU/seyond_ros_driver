@@ -571,6 +571,11 @@ void DriverLidar::point_xyz_data_parse(bool is_use_refl, uint32_t point_num, Poi
     point.flags = point_ptr->channel | roi | (point_ptr->facet << 3);
     point.is_2nd_return = point_ptr->is_2nd_return;
     point.timestamp = point_ptr->ts_10us / ten_us_in_second_c + current_ts_start_;
+#elif defined(ENABLE_XYZIRC)
+    // Map Seyond data to Autoware PointXYZIRC format
+    // Return type (R): 0=unknown, 1=strongest (first), 2=last (second)
+    point.return_type = point_ptr->is_2nd_return ? 2 : 1;  // First return=strongest(1), Second return=last(2)
+    point.channel = point_ptr->scan_id;                     // Channel (C): Vertical scanning line ID
 #endif
     coordinate_transfer(&point, param_.coordinate_mode, point_ptr->x, point_ptr->y, point_ptr->z);
     pcl_pc_ptr->points.push_back(point);
