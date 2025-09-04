@@ -28,6 +28,9 @@
 
 #ifdef ENABLE_XYZIT
 typedef seyond::PointXYZIT SeyondPoint;
+#elif defined(ENABLE_XYZIRC)
+#include "point_xyzirc.h"
+typedef seyond::PointXYZIRC SeyondPoint;
 #else
 typedef pcl::PointXYZI SeyondPoint;
 #endif
