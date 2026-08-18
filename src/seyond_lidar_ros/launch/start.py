@@ -213,7 +213,7 @@ def generate_launch_description():
                     {'transform_matrix': LaunchConfiguration('transform_matrix')},
                 ],
             ),
-            # Disabled RViz launch - not needed for AutoSDV
+            # Disabled RViz launch - not needed for Golf Cart
             # Node(namespace='rviz2', package='rviz2', executable='rviz2', arguments=['-d',rviz_config])
         ]
     )
