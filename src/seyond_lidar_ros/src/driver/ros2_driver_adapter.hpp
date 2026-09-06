@@ -49,9 +49,30 @@ class ROSAdapter {
   }
 
   void init() {
-    rclcpp::QoS qos(rclcpp::KeepLast(10));
-    qos.reliable();
-    inno_frame_pub_ = node_ptr_->create_publisher<sensor_msgs::msg::PointCloud2>(lidar_config_.frame_topic, qos);
+    // BEST_EFFORT, volatile, keep-last -- and it must not be RELIABLE.
+    //
+    // A reliable writer blocks once a reader stops acknowledging, and this
+    // publish runs on the SDK's single deliver worker (worker_num = 1 in
+    // lidar_client.cpp), which is the same thread that parses every incoming
+    // packet. A stalled publish therefore stops the driver draining the LiDAR,
+    // and the SDK responds by dropping the backlog rather than queueing it.
+    //
+    // Measured on the master Orin, 2026-08-25: 377,005 of 628,636 packets
+    // dropped in the deliver stage -- 60% of the sensor -- with that thread
+    // 94.77% busy and roughly 138 ms of it spent per frame inside this call.
+    // An 828 kB PointCloud2 publishes in about a millisecond when nothing is
+    // holding the writer.
+    //
+    // Nothing on this topic asks for reliability on its own account: Autoware's
+    // concatenator subscribes with rclcpp::SensorDataQoS(), and rosbag2 adapts
+    // to whatever the publisher offers. Offering RELIABLE is what created a
+    // reliable reader in the first place.
+    //
+    // Nebula publishes every other LiDAR here BEST_EFFORT, so this also stops
+    // the two sensors behaving differently for no stated reason.
+    inno_frame_pub_ =
+        node_ptr_->create_publisher<sensor_msgs::msg::PointCloud2>(lidar_config_.frame_topic,
+                                                                   rclcpp::SensorDataQoS());
     driver_ptr_->register_publish_frame_callback(
         std::bind(&ROSAdapter::publishFrame, this, std::placeholders::_1, std::placeholders::_2));
 
