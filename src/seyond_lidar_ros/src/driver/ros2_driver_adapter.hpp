@@ -188,72 +188,91 @@ class ROSAdapter {
 
   void publishFrame(const pcl::PointCloud<SeyondPoint>& frame, double timestamp) {
     sensor_msgs::msg::PointCloud2 ros_msg;
-    
-    // Create compact PointCloud2 message for Autoware compatibility
-    // Total point step: 12 (xyz) + 1 (I) + 1 (R) + 2 (C) = 16 bytes
+
+    // The layout is written out by hand rather than taken from pcl::toROSMsg,
+    // because PCL pads its structs for alignment and Autoware reads these
+    // clouds by field offset.
+    //
+    // `timestamp` is the FRAME start. Under ENABLE_XYZIRCAEDT it is also the
+    // origin every per-point time_stamp is measured from, so changing one
+    // without the other silently shears every deskewed cloud.
     ros_msg.header.frame_id = lidar_config_.frame_id;
     int64_t ts_ns = timestamp * 1000;
     ros_msg.header.stamp.sec = ts_ns / 1000000000;
     ros_msg.header.stamp.nanosec = ts_ns % 1000000000;
-    
+
     ros_msg.height = 1;
     ros_msg.width = frame.size();
     ros_msg.is_dense = true;
     ros_msg.is_bigendian = false;
-    ros_msg.point_step = 16;  // Compact layout
+
+    using PF = sensor_msgs::msg::PointField;
+    auto set_field = [&ros_msg](size_t i, const char* name, uint32_t offset, uint8_t type) {
+      ros_msg.fields[i].name = name;
+      ros_msg.fields[i].offset = offset;
+      ros_msg.fields[i].datatype = type;
+      ros_msg.fields[i].count = 1;
+    };
+
+#if defined(ENABLE_XYZIRCAEDT)
+    // Autoware's PointXYZIRCAEDT: 12 (xyz) + 1 + 1 + 2 + 4 + 4 + 4 + 4 = 32,
+    // twice PointXYZIRC's 16. That is the price of deskewability: about 1.6 MB
+    // per frame at 50k points rather than 800 kB.
+    ros_msg.point_step = 32;
     ros_msg.row_step = ros_msg.point_step * ros_msg.width;
-    
-    // Define fields with compact offsets
-    ros_msg.fields.resize(6);
-    
-    ros_msg.fields[0].name = "x";
-    ros_msg.fields[0].offset = 0;
-    ros_msg.fields[0].datatype = sensor_msgs::msg::PointField::FLOAT32;
-    ros_msg.fields[0].count = 1;
-    
-    ros_msg.fields[1].name = "y";
-    ros_msg.fields[1].offset = 4;
-    ros_msg.fields[1].datatype = sensor_msgs::msg::PointField::FLOAT32;
-    ros_msg.fields[1].count = 1;
-    
-    ros_msg.fields[2].name = "z";
-    ros_msg.fields[2].offset = 8;
-    ros_msg.fields[2].datatype = sensor_msgs::msg::PointField::FLOAT32;
-    ros_msg.fields[2].count = 1;
-    
-    ros_msg.fields[3].name = "intensity";
-    ros_msg.fields[3].offset = 12;  // Compact offset
-    ros_msg.fields[3].datatype = sensor_msgs::msg::PointField::UINT8;
-    ros_msg.fields[3].count = 1;
-    
-    ros_msg.fields[4].name = "return_type";
-    ros_msg.fields[4].offset = 13;
-    ros_msg.fields[4].datatype = sensor_msgs::msg::PointField::UINT8;
-    ros_msg.fields[4].count = 1;
-    
-    ros_msg.fields[5].name = "channel";
-    ros_msg.fields[5].offset = 14;
-    ros_msg.fields[5].datatype = sensor_msgs::msg::PointField::UINT16;
-    ros_msg.fields[5].count = 1;
-    
-    // Copy point data with compact layout
+    ros_msg.fields.resize(10);
+    set_field(0, "x", 0, PF::FLOAT32);
+    set_field(1, "y", 4, PF::FLOAT32);
+    set_field(2, "z", 8, PF::FLOAT32);
+    set_field(3, "intensity", 12, PF::UINT8);
+    set_field(4, "return_type", 13, PF::UINT8);
+    set_field(5, "channel", 14, PF::UINT16);
+    set_field(6, "azimuth", 16, PF::FLOAT32);
+    set_field(7, "elevation", 20, PF::FLOAT32);
+    set_field(8, "distance", 24, PF::FLOAT32);
+    set_field(9, "time_stamp", 28, PF::UINT32);
+
     ros_msg.data.resize(ros_msg.row_step);
     uint8_t* data_ptr = ros_msg.data.data();
-    
     for (const auto& point : frame.points) {
-      // Copy x, y, z (12 bytes)
-      memcpy(data_ptr, &point.x, sizeof(float));
+      memcpy(data_ptr + 0, &point.x, sizeof(float));
       memcpy(data_ptr + 4, &point.y, sizeof(float));
       memcpy(data_ptr + 8, &point.z, sizeof(float));
-      
-      // Copy I, R, C (4 bytes)
+      data_ptr[12] = point.intensity;
+      data_ptr[13] = point.return_type;
+      memcpy(data_ptr + 14, &point.channel, sizeof(uint16_t));
+      memcpy(data_ptr + 16, &point.azimuth, sizeof(float));
+      memcpy(data_ptr + 20, &point.elevation, sizeof(float));
+      memcpy(data_ptr + 24, &point.distance, sizeof(float));
+      memcpy(data_ptr + 28, &point.time_stamp, sizeof(uint32_t));
+      data_ptr += 32;
+    }
+#else
+    // PointXYZIRC: 12 (xyz) + 1 (I) + 1 (R) + 2 (C) = 16 bytes. No per-point
+    // time, so nothing downstream can deskew this cloud.
+    ros_msg.point_step = 16;
+    ros_msg.row_step = ros_msg.point_step * ros_msg.width;
+    ros_msg.fields.resize(6);
+    set_field(0, "x", 0, PF::FLOAT32);
+    set_field(1, "y", 4, PF::FLOAT32);
+    set_field(2, "z", 8, PF::FLOAT32);
+    set_field(3, "intensity", 12, PF::UINT8);
+    set_field(4, "return_type", 13, PF::UINT8);
+    set_field(5, "channel", 14, PF::UINT16);
+
+    ros_msg.data.resize(ros_msg.row_step);
+    uint8_t* data_ptr = ros_msg.data.data();
+    for (const auto& point : frame.points) {
+      memcpy(data_ptr + 0, &point.x, sizeof(float));
+      memcpy(data_ptr + 4, &point.y, sizeof(float));
+      memcpy(data_ptr + 8, &point.z, sizeof(float));
       data_ptr[12] = point.intensity;
       data_ptr[13] = point.return_type;
       memcpy(data_ptr + 14, &point.ring, sizeof(uint16_t));
-      
       data_ptr += 16;
     }
-    
+#endif
+
     inno_frame_pub_->publish(std::move(ros_msg));
   }
 

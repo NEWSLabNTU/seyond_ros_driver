@@ -16,9 +16,17 @@ add_compile_options(-Ofast)
 set(SEYOND_SDK_PATH src/seyond_sdk/)
 
 #-------------------------------------
-# Point Type (PointXYZI, PointXYZIT, PointXYZIRC)
+# Point Type (PointXYZI, PointXYZIT, PointXYZIRC, PointXYZIRCAEDT)
+#
+# PointXYZIRCAEDT is Autoware's full layout and the only one here carrying a
+# per-point time offset. Without one nothing can deskew the cloud -- not the CPU
+# distortion corrector, not autoware_cuda_pointcloud_preprocessor -- so a
+# PointXYZIRC deployment is not merely un-accelerated, it is uncorrectable.
+#
+# It costs bandwidth: 32 bytes per point against PointXYZIRC's 16. Configure
+# -DPOINT_TYPE=PointXYZIRC to go back if that matters more than deskewing.
 #-------------------------------------
-set(POINT_TYPE PointXYZIRC)
+set(POINT_TYPE PointXYZIRCAEDT CACHE STRING "Point layout to publish")
 
 if(${POINT_TYPE} STREQUAL "PointXYZI")
   add_definitions(-DENABLE_XYZI)
@@ -26,6 +34,10 @@ elseif(${POINT_TYPE} STREQUAL "PointXYZIT")
   add_definitions(-DENABLE_XYZIT)
 elseif(${POINT_TYPE} STREQUAL "PointXYZIRC")
   add_definitions(-DENABLE_XYZIRC)
+elseif(${POINT_TYPE} STREQUAL "PointXYZIRCAEDT")
+  add_definitions(-DENABLE_XYZIRCAEDT)
+else()
+  message(FATAL_ERROR "unknown POINT_TYPE '${POINT_TYPE}'")
 endif()
 
 

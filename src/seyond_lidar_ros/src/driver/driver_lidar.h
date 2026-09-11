@@ -53,6 +53,9 @@ typedef seyond::PointXYZIT SeyondPoint;
 #elif defined(ENABLE_XYZIRC)
 #include "point_xyzirc.h"
 typedef seyond::PointXYZIRC SeyondPoint;
+#elif defined(ENABLE_XYZIRCAEDT)
+#include "point_xyzircaedt.h"
+typedef seyond::PointXYZIRCAEDT SeyondPoint;
 #else
 typedef pcl::PointXYZI SeyondPoint;
 #endif
@@ -190,6 +193,7 @@ class DriverLidar {
   int64_t current_frame_id_{-1};
   std::vector<uint8_t> data_buffer;
   double current_ts_start_;
+  double pkt_ts_start_us_{0.0};
   double frame_start_ts_;
 
   // transform

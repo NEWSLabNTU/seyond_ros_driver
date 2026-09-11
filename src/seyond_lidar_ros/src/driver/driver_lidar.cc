@@ -27,6 +27,8 @@ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWIS
 USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **********************************************************************************************************************/
 
+#include <cmath>
+
 #include "driver_lidar.h"
 
 #include <assert.h>
@@ -529,6 +531,10 @@ void DriverLidar::convert_and_parse(const InnoDataPacket *pkt) {
 void DriverLidar::data_packet_parse(const InnoDataPacket *pkt) {
   // calculate the point timestamp
   current_ts_start_ = pkt->common.ts_start_us / us_in_second_c;
+  // The same instant, unscaled. PointXYZIRCAEDT differences it against
+  // frame_start_ts_, and doing that in microseconds keeps the resolution a
+  // double already carrying an epoch would lose.
+  pkt_ts_start_us_ = pkt->common.ts_start_us;
   // adapt different data structures form different lidar
   if (CHECK_EN_XYZ_POINTCLOUD_DATA(pkt->type)) {
     const InnoEnXyzPoint *pt =
@@ -582,6 +588,44 @@ void DriverLidar::point_xyz_data_parse(bool is_use_refl, uint32_t point_num, Poi
     // Return type (R): 0=unknown, 1=strongest (first), 2=last (second)
     point.return_type = point_ptr->is_2nd_return ? 2 : 1;  // First return=strongest(1), Second return=last(2)
     point.ring = point_ptr->scan_id;                        // Ring/Channel (C): Vertical scanning line ID
+#elif defined(ENABLE_XYZIRCAEDT)
+    // Autoware's PointXYZIRCAEDT: PointXYZIRC plus the three polar values and,
+    // the reason this layout exists at all, a per-point time offset.
+    point.return_type = point_ptr->is_2nd_return ? 2 : 1;
+    if constexpr (std::is_same<PointType, const InnoXyzPoint *>::value) {
+      // ring_id is a true elevation index where the sensor provides one and
+      // scan_id is not. Same choice as the XYZIT branch above.
+      point.channel = param_.enable_falcon_ring ? point_ptr->ring_id : point_ptr->scan_id;
+    } else {
+      point.channel = point_ptr->scan_id;
+    }
+
+    // time_stamp is UNSIGNED NANOSECONDS AFTER THE HEADER STAMP, and that stamp
+    // is the FRAME start (frame_start_ts_), not the packet start. Getting the
+    // origin wrong does not fail loudly: it yields a cloud that looks entirely
+    // plausible and that the distortion corrector then shears.
+    //
+    //   packet start (us) + ts_10us * 10 us  ->  the point's absolute time
+    //   minus frame_start_ts_ (us)           ->  the offset this field wants
+    //
+    // Clamped at zero because the field is unsigned: a point that predated its
+    // own frame start would otherwise wrap to about four seconds.
+    {
+      const double point_ts_us =
+          pkt_ts_start_us_ + static_cast<double>(point_ptr->ts_10us) * 10.0;
+      const double offset_ns = (point_ts_us - frame_start_ts_) * 1000.0;
+      point.time_stamp = offset_ns > 0.0 ? static_cast<std::uint32_t>(offset_ns) : 0u;
+    }
+
+    // The SDK point carries no angles, so azimuth and elevation are computed
+    // here. distance is the SDK's own radius rather than a recomputation from
+    // x/y/z: that is the measured range, and x/y/z have been through
+    // coordinate_mode.
+    point.distance = static_cast<float>(point_ptr->radius);
+    point.azimuth = std::atan2(static_cast<float>(point_ptr->y), static_cast<float>(point_ptr->x));
+    point.elevation = std::atan2(
+        static_cast<float>(point_ptr->z),
+        std::hypot(static_cast<float>(point_ptr->x), static_cast<float>(point_ptr->y)));
 #endif
     coordinate_transfer(&point, param_.coordinate_mode, point_ptr->x, point_ptr->y, point_ptr->z);
     pcl_pc_ptr->points.push_back(point);
